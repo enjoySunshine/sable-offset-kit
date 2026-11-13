@@ -24,7 +24,7 @@ export interface FederatedEventTarget extends EventEmitter, EventTarget, Require
     // by adding its own `removeAllListeners(event?: string): void;` method,
     // so we have to override this signature when extending both `EventTarget` and `utils.EventEmitter`
     // to make it compatible with Angular projects
-    // @see 
+    // @see
 
     /** Remove all listeners, or those of the specified event. */
     removeAllListeners(event?: string | symbol): this;

@@ -779,6 +779,112 @@ export class GraphicsPath
         return this;
     }
 
+    /**
+     * Translates the entire path by the given offset.
+     *
+     * Unlike {@link GraphicsPath#transform}, which composes a matrix into each shape's transform,
+     * this method bakes the offset directly into the coordinates of every instruction wherever
+     * possible. Shapes that already carry a non-identity transform keep their coordinates and
+     * instead have the offset prepended to their transform, so the rendered result is always
+     * the whole path shifted by `(x, y)`.
+     *
+     * Note: like {@link GraphicsPath#transform}, the offset is baked into the instruction data,
+     * so paths sharing instruction data (via a shallow {@link GraphicsPath#clone}) are affected too.
+     * @param x - The horizontal offset to apply.
+     * @param y - The vertical offset to apply.
+     * @returns The instance of the current object for chaining further operations.
+     */
+    public translate(x: number, y: number): this
+    {
+        if (!x && !y) return this;
+
+        for (let i = 0; i < this.instructions.length; i++)
+        {
+            const instruction = this.instructions[i];
+            const data = instruction.data;
+
+            switch (instruction.action)
+            {
+                case 'moveTo':
+                case 'lineTo':
+                case 'arc':
+                    data[0] += x;
+                    data[1] += y;
+                    break;
+
+                case 'quadraticCurveTo':
+                case 'arcTo':
+                    data[0] += x;
+                    data[1] += y;
+                    data[2] += x;
+                    data[3] += y;
+                    break;
+
+                case 'bezierCurveTo':
+                    data[0] += x;
+                    data[1] += y;
+                    data[2] += x;
+                    data[3] += y;
+                    data[4] += x;
+                    data[5] += y;
+                    break;
+
+                case 'arcToSvg':
+                    data[5] += x;
+                    data[6] += y;
+                    break;
+
+                case 'rect':
+                    translateShapeData(data, 4, x, y);
+                    break;
+                case 'circle':
+                    translateShapeData(data, 3, x, y);
+                    break;
+                case 'ellipse':
+                    translateShapeData(data, 4, x, y);
+                    break;
+                case 'roundRect':
+                case 'chamferRect':
+                case 'regularPoly':
+                    translateShapeData(data, 5, x, y);
+                    break;
+                case 'filletRect':
+                case 'roundPoly':
+                    data[0] += x;
+                    data[1] += y;
+                    break;
+                case 'poly':
+                    translatePolyData(data, x, y);
+                    break;
+                case 'roundShape':
+                    data[0] = (data[0] as RoundedPoint[]).map((point) => ({
+                        ...point,
+                        x: point.x + x,
+                        y: point.y + y,
+                    }));
+                    break;
+                case 'addPath':
+                    if (data[1] && !(data[1] as Matrix).isIdentity())
+                    {
+                        data[1] = prependTranslation(data[1], x, y);
+                    }
+                    else
+                    {
+                        // never translate the shared sub-path in place, it may be used elsewhere
+                        data[0] = (data[0] as GraphicsPath).clone(true).translate(x, y);
+                    }
+                    break;
+                case 'closePath':
+                default:
+                    break;
+            }
+        }
+
+        this._dirty = true;
+
+        return this;
+    }
+
     get bounds(): Bounds
     {
         return this.shapePath.bounds;
@@ -865,4 +971,83 @@ function adjustTransform(currentMatrix?: Matrix, transform?: Matrix): Matrix
     }
 
     return transform.clone();
+}
+
+/**
+ * Returns a copy of the matrix with a translation prepended, leaving the original untouched.
+ * Prepending a pure translation only shifts the translation components of the matrix.
+ * @param matrix - The matrix to copy and shift.
+ * @param x - The horizontal offset to prepend.
+ * @param y - The vertical offset to prepend.
+ * @returns A new matrix with the translation prepended.
+ */
+function prependTranslation(matrix: Matrix, x: number, y: number): Matrix
+{
+    const translated = matrix.clone();
+
+    translated.tx += x;
+    translated.ty += y;
+
+    return translated;
+}
+
+/**
+ * Offsets a shape instruction's coordinates by `(x, y)`. When the shape carries a non-identity
+ * transform, the offset is prepended to that transform instead, so the shape is still shifted
+ * by exactly `(x, y)` once the transform is applied.
+ * @param data - The instruction data to offset in place.
+ * @param matrixIndex - The index of the shape's transform within `data`.
+ * @param x - The horizontal offset to apply.
+ * @param y - The vertical offset to apply.
+ */
+function translateShapeData(data: any[], matrixIndex: number, x: number, y: number): void
+{
+    const matrix = data[matrixIndex] as Matrix;
+
+    if (matrix && !matrix.isIdentity())
+    {
+        data[matrixIndex] = prependTranslation(matrix, x, y);
+    }
+    else
+    {
+        data[0] += x;
+        data[1] += y;
+    }
+}
+
+/**
+ * Offsets a `poly` instruction's points by `(x, y)`, or its transform when it carries one.
+ * @param data - The instruction data to offset in place.
+ * @param x - The horizontal offset to apply.
+ * @param y - The vertical offset to apply.
+ */
+function translatePolyData(data: any[], x: number, y: number): void
+{
+    const matrix = data[2] as Matrix;
+
+    if (matrix && !matrix.isIdentity())
+    {
+        data[2] = prependTranslation(matrix, x, y);
+
+        return;
+    }
+
+    const points = data[0];
+
+    if (typeof points[0] === 'number')
+    {
+        const translated = (points as number[]).slice();
+
+        for (let i = 0; i < translated.length; i += 2)
+        {
+            translated[i] += x;
+            translated[i + 1] += y;
+        }
+
+        data[0] = translated;
+    }
+    else
+    {
+        data[0] = (points as PointData[]).map((point) => ({ x: point.x + x, y: point.y + y }));
+    }
 }

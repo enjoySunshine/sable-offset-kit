@@ -1089,7 +1089,7 @@ export class EventSystem implements System<EventSystemOptions>
         // in any order on other browsers will result in WheelEvent.DOM_DELTA_PIXEL (0).
         // Therefore, we need to read WheelEvent.deltaMode after deltaX/deltaY/deltaZ in order to
         // make its behavior more consistent across browsers.
-        // @see 
+        // @see
         event.deltaX = nativeEvent.deltaX;
         event.deltaY = nativeEvent.deltaY;
         event.deltaZ = nativeEvent.deltaZ;

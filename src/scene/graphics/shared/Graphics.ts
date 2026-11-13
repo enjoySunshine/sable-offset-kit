@@ -1713,6 +1713,56 @@ export class Graphics extends ViewContainer<GraphicsGpuData> implements Instruct
         return this._callContextMethod('translate', args);
     }
     /**
+     * Adds a solid, offset copy of every filled shape, drawn underneath the originals.
+     *
+     * The copies render, export (SVG) and contribute to bounds exactly like regular fills,
+     * but they are ignored by hit testing ({@link Graphics#containsPoint}) — perfect for
+     * decorative offset blocks that should never intercept pointer events.
+     *
+     * The copies can be removed again with {@link Graphics#removeOffsetShadow}.
+     * @example
+     * ```ts
+     * const graphics = new Graphics();
+     *
+     * graphics
+     *     .rect(10, 10, 40, 20)
+     *     .fill('#ffffff')
+     *     .addOffsetShadow(24, 10, '#202020');
+     * ```
+     * @param x - The horizontal offset of the shadow copies.
+     * @param y - The vertical offset of the shadow copies.
+     * @param color - The fill color of the shadow copies. Defaults to `0x202020`.
+     * @returns The Graphics instance for method chaining
+     * @see {@link Graphics#removeOffsetShadow} For removing the shadow copies again
+     */
+    public addOffsetShadow(x: number, y: number, color?: ColorSource): this;
+    public addOffsetShadow(...args: Parameters<GraphicsContext['addOffsetShadow']>): this
+    {
+        return this._callContextMethod('addOffsetShadow', args);
+    }
+    /**
+     * Removes all shadow copies previously added with {@link Graphics#addOffsetShadow},
+     * restoring the bounds, hit testing and SVG export of the original shapes.
+     * @example
+     * ```ts
+     * const graphics = new Graphics();
+     *
+     * graphics
+     *     .rect(10, 10, 40, 20)
+     *     .fill('#ffffff')
+     *     .addOffsetShadow(24, 10, '#202020');
+     *
+     * // Back to just the white rect
+     * graphics.removeOffsetShadow();
+     * ```
+     * @returns The Graphics instance for method chaining
+     * @see {@link Graphics#addOffsetShadow} For adding the shadow copies
+     */
+    public removeOffsetShadow(): this
+    {
+        return this._callContextMethod('removeOffsetShadow', []);
+    }
+    /**
      * Clears all drawing commands from the graphics context, effectively resetting it.
      * This includes clearing the current path, fill style, stroke style, and transformations.
      *

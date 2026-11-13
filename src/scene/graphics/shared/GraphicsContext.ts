@@ -38,7 +38,15 @@ export type BatchMode = 'auto' | 'batch' | 'no-batch';
 export interface FillInstruction
 {
     action: 'fill' | 'cut'
-    data: { style: ConvertedFillStyle, path: GraphicsPath, hole?: GraphicsPath }
+    data: {
+        style: ConvertedFillStyle,
+        path: GraphicsPath,
+        hole?: GraphicsPath,
+        /** When `false`, this fill is skipped by hit testing (`containsPoint`). Defaults to `true`. */
+        interactive?: boolean,
+        /** Marks this fill as a copy added by `addOffsetShadow`, so it can be removed again. */
+        offsetShadow?: boolean,
+    }
 }
 
 /** @internal */
@@ -451,6 +459,97 @@ export class GraphicsContext extends EventEmitter<{
         }
 
         this._initNextPathLocation();
+
+        return this;
+    }
+
+    /**
+     * Adds a solid, offset copy of every filled shape in this context, drawn underneath the originals.
+     *
+     * The copies are inserted before the current instructions, so they render, export (SVG) and
+     * contribute to bounds exactly like regular fills — with one exception: they are ignored by
+     * hit testing ({@link GraphicsContext#containsPoint}), making them ideal for decorative
+     * offset blocks that should never intercept pointer events.
+     *
+     * The copies can be removed again with {@link GraphicsContext#removeOffsetShadow}.
+     * @example
+     * ```ts
+     * const context = new GraphicsContext();
+     *
+     * context.rect(10, 10, 40, 20).fill('#ffffff');
+     *
+     * // dark copy, shifted 24 right and 10 down, drawn beneath the white rect
+     * context.addOffsetShadow(24, 10, '#202020');
+     * ```
+     * @param x - The horizontal offset of the shadow copies.
+     * @param y - The vertical offset of the shadow copies.
+     * @param color - The fill color of the shadow copies. Defaults to `0x202020`.
+     * @returns The instance of the current GraphicsContext for method chaining.
+     */
+    public addOffsetShadow(x: number, y: number, color: ColorSource = 0x202020): this
+    {
+        const shadows: FillInstruction[] = [];
+        const style = toFillStyle({ color }, GraphicsContext.defaultFillStyle);
+
+        for (let i = 0; i < this.instructions.length; i++)
+        {
+            const instruction = this.instructions[i];
+
+            if (instruction.action !== 'fill' || instruction.data.offsetShadow) continue;
+
+            const shadow: FillInstruction = {
+                action: 'fill',
+                data: {
+                    style,
+                    path: instruction.data.path.clone(true).translate(x, y),
+                    interactive: false,
+                    offsetShadow: true,
+                }
+            };
+
+            if (instruction.data.hole)
+            {
+                shadow.data.hole = instruction.data.hole.clone(true).translate(x, y);
+            }
+
+            shadows.push(shadow);
+        }
+
+        if (shadows.length > 0)
+        {
+            // shadow copies always sit underneath the shapes they were copied from
+            this.instructions.unshift(...shadows);
+
+            this.onUpdate();
+        }
+
+        return this;
+    }
+
+    /**
+     * Removes all shadow copies previously added with {@link GraphicsContext#addOffsetShadow},
+     * restoring the instructions, bounds and hit testing of the original shapes.
+     * @returns The instance of the current GraphicsContext for method chaining.
+     */
+    public removeOffsetShadow(): this
+    {
+        let removed = false;
+
+        for (let i = this.instructions.length - 1; i >= 0; i--)
+        {
+            const instruction = this.instructions[i];
+
+            if (instruction.action === 'fill' && instruction.data.offsetShadow)
+            {
+                this.instructions.splice(i, 1);
+                removed = true;
+            }
+        }
+
+        if (removed)
+        {
+            this.onUpdate();
+        }
 
         return this;
     }
@@ -1163,6 +1262,10 @@ export class GraphicsContext extends EventEmitter<{
             const instruction = instructions[k];
 
             const data = instruction.data as FillInstruction['data'];
+
+            // non-interactive fills (e.g. offset shadow copies) never hit test
+            if (data.interactive === false) continue;
+
             const path = data.path;
 
             if (!instruction.action || !path) continue;

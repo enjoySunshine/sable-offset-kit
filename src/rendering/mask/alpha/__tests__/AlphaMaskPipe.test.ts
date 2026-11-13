@@ -216,7 +216,7 @@ describe('AlphaMaskPipe', () =>
         expect(Texture.EMPTY.listenerCount('update')).toBe(listenersBefore);
     });
 
-    // 
+    //
     it('should survive a mask texture destroyed while still assigned to the mask sprite', async () =>
     {
         const renderer = await getWebGLRenderer();
